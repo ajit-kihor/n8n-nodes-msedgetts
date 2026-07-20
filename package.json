@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-msedgetts",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Generate MP3 speech and list voices with Microsoft Edge TTS in n8n",
 	"scripts": {
 		"build": "node scripts/clean.mjs && n8n-node build && node scripts/bundle.mjs",
