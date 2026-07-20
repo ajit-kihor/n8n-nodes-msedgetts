@@ -1,14 +1,13 @@
 {
-  "displayName": "Microsoft Edge TTS",
-  "name": "msEdgeTts",
-  "icon": "file:msedgetts.svg",
-  "group": ["transform"],
-  "description": "Generate speech from text using Microsoft Edge Text-to-Speech",
-  "version": 1,
-  "defaults": {
-    "name": "Microsoft Edge TTS",
-    "color": "#0078D4"
-  },
-  "inputs": ["main"],
-  "outputs": ["main"]
+	"node": "n8n-nodes-msedgetts",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Marketing & Content", "Utility"],
+	"resources": {
+		"primaryDocumentation": [
+			{
+				"url": "https://github.com/ajit-kihor/n8n-nodes-msedgetts#readme"
+			}
+		]
+	}
 }

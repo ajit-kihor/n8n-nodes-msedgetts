@@ -1,60 +1,77 @@
 {
-  "name": "n8n-nodes-msedgetts",
-  "version": "1.0.0",
-  "description": "Microsoft Edge TTS node for n8n",
-  "main": "dist/nodes/MsEdgeTts/MsEdgeTts.node.js",
-  "scripts": {
-    "build": "tsc && gulp",
-    "lint": "eslint \"{nodes,utils,test}/**/*.ts\"",
-    "format": "prettier --write \"{nodes,utils,test}/**/*.ts\" \"**/*.json\" \"**/*.md\"",
-    "test": "jest"
-  },
-  "keywords": [
-    "n8n",
-    "n8n-community-node-package",
-    "text-to-speech",
-    "tts",
-    "edge-tts",
-    "microsoft-edge",
-    "audio",
-    "automation"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/nikhil/n8n-nodes-msedgetts.git"
-  },
-  "author": "Nikhil",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/nikhil/n8n-nodes-msedgetts/issues"
-  },
-  "homepage": "https://github.com/nikhil/n8n-nodes-msedgetts#readme",
-  "engines": {
-    "node": ">=18"
-  },
-  "n8n": {
-    "n8nNodesApiVersion": 1,
-    "nodes": [
-      "dist/nodes/MsEdgeTts/MsEdgeTts.node.js"
-    ]
-  },
-  "dependencies": {
-    "msedge-tts": "^2.0.7"
-  },
-  "peerDependencies": {
-    "n8n-workflow": "*"
-  },
-  "devDependencies": {
-    "@types/jest": "^29.5.12",
-    "@types/node": "^18.19.0",
-    "@typescript-eslint/eslint-plugin": "^6.21.0",
-    "@typescript-eslint/parser": "^6.21.0",
-    "eslint": "^8.56.0",
-    "gulp": "^4.0.2",
-    "jest": "^29.7.0",
-    "n8n-workflow": "*",
-    "prettier": "^3.2.5",
-    "ts-jest": "^29.1.2",
-    "typescript": "^5.3.3"
-  }
+	"name": "n8n-nodes-msedgetts",
+	"version": "1.0.0",
+	"description": "Generate MP3 speech and list voices with Microsoft Edge TTS in n8n",
+	"scripts": {
+		"build": "node scripts/clean.mjs && n8n-node build && node scripts/bundle.mjs",
+		"build:watch": "tsc --watch",
+		"dev": "n8n-node dev",
+		"lint": "n8n-node lint",
+		"lint:fix": "n8n-node lint --fix",
+		"format": "prettier --write .",
+		"format:check": "prettier --check .",
+		"test": "jest --runInBand",
+		"test:coverage": "jest --runInBand --coverage",
+		"release": "n8n-node release",
+		"prepublishOnly": "npm test && n8n-node prerelease"
+	},
+	"files": [
+		"dist"
+	],
+	"keywords": [
+		"n8n",
+		"n8n-community-node-package",
+		"text-to-speech",
+		"tts",
+		"edge-tts",
+		"microsoft-edge",
+		"audio",
+		"automation"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ajit-kihor/n8n-nodes-msedgetts.git"
+	},
+	"author": {
+		"name": "ajit-kihor",
+		"email": "128568926+ajit-kihor@users.noreply.github.com",
+		"url": "https://github.com/ajit-kihor"
+	},
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/ajit-kihor/n8n-nodes-msedgetts/issues"
+	},
+	"homepage": "https://github.com/ajit-kihor/n8n-nodes-msedgetts#readme",
+	"publishConfig": {
+		"access": "public",
+		"provenance": true
+	},
+	"engines": {
+		"node": ">=22.0.0"
+	},
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"strict": false,
+		"nodes": [
+			"dist/nodes/MsEdgeTts/MsEdgeTts.node.js"
+		]
+	},
+	"peerDependencies": {
+		"n8n-workflow": "*"
+	},
+	"devDependencies": {
+		"@n8n/node-cli": "^0.39.3",
+		"@ts-morph/common": "^0.29.0",
+		"@types/jest": "^30.0.0",
+		"@types/node": "^22.0.0",
+		"esbuild": "^0.28.1",
+		"eslint": "^9.39.4",
+		"jest": "^30.4.2",
+		"msedge-tts": "^2.0.7",
+		"n8n-workflow": "*",
+		"prettier": "^3.9.5",
+		"release-it": "^20.2.1",
+		"ts-jest": "^29.4.11",
+		"typescript": "^5.9.3"
+	}
 }

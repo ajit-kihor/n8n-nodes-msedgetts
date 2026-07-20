@@ -1,81 +1,79 @@
-import { synthesizeSpeech } from '../../utils/speech';
+import { Readable } from 'node:stream';
+
 import { MsEdgeTTS } from 'msedge-tts';
-import { Readable } from 'stream';
+
+import { synthesizeSpeech } from '../../nodes/MsEdgeTts/speech';
 
 jest.mock('msedge-tts');
 
+function streamFromChunks(chunks: Buffer[]): Readable {
+	return Readable.from(chunks);
+}
+
 describe('speech utility', () => {
-  it('should synthesize speech correctly with default prosody options', async () => {
-    const mockSetMetadata = jest.fn().mockResolvedValue(undefined);
-    const mockToStream = jest.fn().mockImplementation(() => {
-      const stream = new Readable();
-      stream._read = () => {};
-      setTimeout(() => {
-        stream.push(Buffer.from('audio-chunk-1'));
-        stream.push(Buffer.from('audio-chunk-2'));
-        stream.push(null); // End of stream
-        stream.emit('close');
-      }, 10);
-      return { audioStream: stream, metadataStream: null };
-    });
+	it('synthesizes speech with default prosody options', async () => {
+		const setMetadata = jest.fn().mockResolvedValue(undefined);
+		const toStream = jest.fn().mockReturnValue({
+			audioStream: streamFromChunks([Buffer.from('audio-1'), Buffer.from('audio-2')]),
+			metadataStream: null,
+		});
+		(MsEdgeTTS as unknown as jest.Mock).mockImplementation(() => ({ setMetadata, toStream }));
 
-    (MsEdgeTTS as unknown as jest.Mock).mockImplementation(() => ({
-      setMetadata: mockSetMetadata,
-      toStream: mockToStream,
-    }));
+		const result = await synthesizeSpeech('Hello world', {
+			voice: 'en-US-JennyNeural',
+		});
 
-    const result = await synthesizeSpeech('Hello world', {
-      voice: 'en-US-JennyNeural',
-    });
+		expect(result.toString()).toBe('audio-1audio-2');
+		expect(setMetadata).toHaveBeenCalledWith('en-US-JennyNeural', expect.any(String));
+		expect(toStream).toHaveBeenCalledWith('Hello world', {
+			rate: '+0%',
+			pitch: '+0Hz',
+			volume: '+0%',
+		});
+	});
 
-    expect(result).toBeInstanceOf(Buffer);
-    expect(result.toString()).toBe('audio-chunk-1audio-chunk-2');
-    expect(mockSetMetadata).toHaveBeenCalledWith('en-US-JennyNeural', expect.any(String));
-    expect(mockToStream).toHaveBeenCalledWith('Hello world', {
-      rate: '+0%',
-      pitch: '+0Hz',
-      volume: '+0%',
-    });
-  });
+	it('passes custom prosody settings', async () => {
+		const toStream = jest.fn().mockReturnValue({
+			audioStream: streamFromChunks([Buffer.from('audio')]),
+			metadataStream: null,
+		});
+		(MsEdgeTTS as unknown as jest.Mock).mockImplementation(() => ({
+			setMetadata: jest.fn().mockResolvedValue(undefined),
+			toStream,
+		}));
 
-  it('should pass correct mapped prosody settings', async () => {
-    const mockSetMetadata = jest.fn().mockResolvedValue(undefined);
-    const mockToStream = jest.fn().mockImplementation(() => {
-      const stream = new Readable();
-      stream._read = () => {};
-      setTimeout(() => {
-        stream.push(Buffer.from('audio'));
-        stream.push(null);
-        stream.emit('close');
-      }, 10);
-      return { audioStream: stream, metadataStream: null };
-    });
+		await synthesizeSpeech('Hello world', {
+			voice: 'hi-IN-SwaraNeural',
+			rate: '+20%',
+			pitch: '-10Hz',
+			volume: '+5%',
+		});
 
-    (MsEdgeTTS as unknown as jest.Mock).mockImplementation(() => ({
-      setMetadata: mockSetMetadata,
-      toStream: mockToStream,
-    }));
+		expect(toStream).toHaveBeenCalledWith('Hello world', {
+			rate: '+20%',
+			pitch: '-10Hz',
+			volume: '+5%',
+		});
+	});
 
-    await synthesizeSpeech('Hello world', {
-      voice: 'hi-IN-SwaraNeural',
-      rate: '+20%',
-      pitch: '-10Hz',
-      volume: '+5%',
-    });
+	it('rejects empty text and voice values', async () => {
+		await expect(synthesizeSpeech('', { voice: 'en-US-JennyNeural' })).rejects.toThrow(
+			'Text to synthesize cannot be empty',
+		);
+		await expect(synthesizeSpeech('Hello', { voice: '   ' })).rejects.toThrow(
+			'Voice cannot be empty',
+		);
+	});
 
-    expect(mockToStream).toHaveBeenCalledWith('Hello world', {
-      rate: '+20%',
-      pitch: '-10Hz',
-      volume: '+5%',
-    });
-  });
+	it('rejects when synthesis times out', async () => {
+		const audioStream = new Readable({ read() {} });
+		(MsEdgeTTS as unknown as jest.Mock).mockImplementation(() => ({
+			setMetadata: jest.fn().mockResolvedValue(undefined),
+			toStream: jest.fn().mockReturnValue({ audioStream, metadataStream: null }),
+		}));
 
-  it('should throw an error for empty text', async () => {
-    await expect(synthesizeSpeech('', { voice: 'en-US-JennyNeural' })).rejects.toThrow(
-      'Text to synthesize cannot be empty',
-    );
-    await expect(synthesizeSpeech('   ', { voice: 'en-US-JennyNeural' })).rejects.toThrow(
-      'Text to synthesize cannot be empty',
-    );
-  });
+		await expect(
+			synthesizeSpeech('Hello', { voice: 'en-US-JennyNeural', timeoutMs: 10 }),
+		).rejects.toThrow('Speech synthesis timed out after 10 ms');
+	});
 });

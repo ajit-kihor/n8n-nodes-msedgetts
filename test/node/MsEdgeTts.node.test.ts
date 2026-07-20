@@ -1,165 +1,148 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import type { IExecuteFunctions, INodeExecutionData } from 'n8n-workflow';
+
 import { MsEdgeTts } from '../../nodes/MsEdgeTts/MsEdgeTts.node';
-import * as speechUtils from '../../utils/speech';
-import * as voicesUtils from '../../utils/voices';
-import { IExecuteFunctions, INodeExecutionData } from 'n8n-workflow';
+import * as speechUtils from '../../nodes/MsEdgeTts/speech';
+import * as voicesUtils from '../../nodes/MsEdgeTts/voices';
 
-jest.mock('../../utils/speech');
-jest.mock('../../utils/voices');
+jest.mock('../../nodes/MsEdgeTts/speech');
+jest.mock('../../nodes/MsEdgeTts/voices');
 
-describe('MsEdgeTts Node', () => {
-  let node: MsEdgeTts;
+const preparedAudio = {
+	data: 'prepared-binary-data',
+	fileName: 'audio.mp3',
+	mimeType: 'audio/mpeg',
+};
 
-  beforeEach(() => {
-    node = new MsEdgeTts();
-  });
+function createContext(
+	inputData: INodeExecutionData[],
+	parameters: Record<string, unknown>,
+	continueOnFail = false,
+) {
+	return {
+		getInputData: () => inputData,
+		getNodeParameter: (name: string, _index: number, fallback?: unknown) =>
+			parameters[name] ?? fallback,
+		getNode: () => ({ name: 'Microsoft Edge TTS', type: 'msEdgeTts', typeVersion: 1 }),
+		continueOnFail: () => continueOnFail,
+		helpers: {
+			prepareBinaryData: jest.fn().mockResolvedValue(preparedAudio),
+		},
+	} as unknown as IExecuteFunctions;
+}
 
-  describe('operation = generateSpeech', () => {
-    it('should generate speech with default options', async () => {
-      const mockSynthesizeSpeech = jest
-        .spyOn(speechUtils, 'synthesizeSpeech')
-        .mockResolvedValue(Buffer.from('synthesized-audio'));
+describe('MsEdgeTts node', () => {
+	let node: MsEdgeTts;
 
-      const mockInputData: INodeExecutionData[] = [
-        {
-          json: { someInputKey: 'inputValue' },
-        },
-      ];
+	beforeEach(() => {
+		node = new MsEdgeTts();
+	});
 
-      const mockParams: { [key: string]: any } = {
-        operation: 'generateSpeech',
-        text: 'Test Speech Text',
-        voice: 'en-US-JennyNeural',
-        adjustVoiceSettings: false,
-      };
+	it('generates speech with n8n-managed binary data and item pairing', async () => {
+		const synthesizeSpeech = jest
+			.spyOn(speechUtils, 'synthesizeSpeech')
+			.mockResolvedValue(Buffer.from('synthesized-audio'));
+		const inputData: INodeExecutionData[] = [{ json: { input: 'value' } }];
+		const context = createContext(inputData, {
+			operation: 'generateSpeech',
+			text: 'Test speech',
+			voice: 'en-US-JennyNeural',
+			adjustVoiceSettings: false,
+			outputBinaryField: 'audio',
+			fileName: 'audio.mp3',
+		});
 
-      const mockContext = {
-        getInputData: () => mockInputData,
-        getNodeParameter: (name: string, index: number, fallback?: any) => {
-          return mockParams[name] !== undefined ? mockParams[name] : fallback;
-        },
-        getNode: () => ({}),
-        continueOnFail: () => false,
-      } as unknown as IExecuteFunctions;
+		const result = await node.execute.call(context);
 
-      const result = await node.execute.call(mockContext);
+		expect(result[0]).toEqual([
+			{
+				json: { input: 'value' },
+				binary: { audio: preparedAudio },
+				pairedItem: { item: 0 },
+			},
+		]);
+		expect(context.helpers.prepareBinaryData).toHaveBeenCalledWith(
+			Buffer.from('synthesized-audio'),
+			'audio.mp3',
+			'audio/mpeg',
+		);
+		expect(synthesizeSpeech).toHaveBeenCalledWith('Test speech', {
+			voice: 'en-US-JennyNeural',
+			rate: undefined,
+			pitch: undefined,
+			volume: undefined,
+		});
+	});
 
-      expect(result).toBeDefined();
-      expect(result[0]).toHaveLength(1);
+	it('uses a custom voice and maps prosody settings', async () => {
+		const synthesizeSpeech = jest
+			.spyOn(speechUtils, 'synthesizeSpeech')
+			.mockResolvedValue(Buffer.from('audio'));
+		const context = createContext([{ json: {} }], {
+			operation: 'generateSpeech',
+			text: 'Custom voice text',
+			voice: 'custom',
+			customVoice: 'hi-IN-MadhurNeural',
+			adjustVoiceSettings: true,
+			rate: 20,
+			pitch: -30,
+			volume: 5,
+			outputBinaryField: 'speech',
+			fileName: 'custom.mp3',
+		});
 
-      const outputItem = result[0][0];
-      expect(outputItem.json).toEqual({ someInputKey: 'inputValue' });
-      expect(outputItem.binary).toBeDefined();
-      expect(outputItem.binary!.audio).toBeDefined();
-      expect(outputItem.binary!.audio.fileName).toBe('audio.mp3');
-      expect(outputItem.binary!.audio.mimeType).toBe('audio/mpeg');
-      expect(outputItem.binary!.audio.data).toBe(Buffer.from('synthesized-audio').toString('base64'));
+		await node.execute.call(context);
 
-      expect(mockSynthesizeSpeech).toHaveBeenCalledWith('Test Speech Text', {
-        voice: 'en-US-JennyNeural',
-        rate: undefined,
-        pitch: undefined,
-        volume: undefined,
-      });
-    });
+		expect(synthesizeSpeech).toHaveBeenCalledWith('Custom voice text', {
+			voice: 'hi-IN-MadhurNeural',
+			rate: '+20%',
+			pitch: '-30Hz',
+			volume: '+5%',
+		});
+	});
 
-    it('should use custom voice when voice = custom', async () => {
-      const mockSynthesizeSpeech = jest
-        .spyOn(speechUtils, 'synthesizeSpeech')
-        .mockResolvedValue(Buffer.from('audio-data'));
+	it('returns paired error items when continue on fail is enabled', async () => {
+		jest.spyOn(speechUtils, 'synthesizeSpeech').mockRejectedValue(new Error('Service unavailable'));
+		const inputData: INodeExecutionData[] = [{ json: { id: 1 } }, { json: { id: 2 } }];
+		const context = createContext(
+			inputData,
+			{
+				operation: 'generateSpeech',
+				text: 'Test',
+				voice: 'en-US-JennyNeural',
+				adjustVoiceSettings: false,
+				outputBinaryField: 'audio',
+				fileName: 'audio.mp3',
+			},
+			true,
+		);
 
-      const mockInputData: INodeExecutionData[] = [{ json: {} }];
+		const result = await node.execute.call(context);
 
-      const mockParams: { [key: string]: any } = {
-        operation: 'generateSpeech',
-        text: 'Custom Voice Text',
-        voice: 'custom',
-        customVoice: 'hi-IN-MadhurNeural',
-        adjustVoiceSettings: false,
-      };
+		expect(result[0]).toEqual([
+			expect.objectContaining({
+				json: { id: 1, error: 'Service unavailable' },
+				pairedItem: { item: 0 },
+			}),
+			expect.objectContaining({
+				json: { id: 2, error: 'Service unavailable' },
+				pairedItem: { item: 1 },
+			}),
+		]);
+	});
 
-      const mockContext = {
-        getInputData: () => mockInputData,
-        getNodeParameter: (name: string, index: number, fallback?: any) => {
-          return mockParams[name] !== undefined ? mockParams[name] : fallback;
-        },
-        getNode: () => ({}),
-        continueOnFail: () => false,
-      } as unknown as IExecuteFunctions;
+	it('lists voices for every input item and preserves item pairing', async () => {
+		const voices = [{ name: 'en-US-JennyNeural', locale: 'en-US', gender: 'Female' }];
+		jest.spyOn(voicesUtils, 'getNormalizedVoices').mockResolvedValue(voices);
+		const context = createContext([{ json: { id: 1 } }, { json: { id: 2 } }], {
+			operation: 'listVoices',
+		});
 
-      await node.execute.call(mockContext);
+		const result = await node.execute.call(context);
 
-      expect(mockSynthesizeSpeech).toHaveBeenCalledWith('Custom Voice Text', {
-        voice: 'hi-IN-MadhurNeural',
-        rate: undefined,
-        pitch: undefined,
-        volume: undefined,
-      });
-    });
-
-    it('should map adjustVoiceSettings to prosody strings', async () => {
-      const mockSynthesizeSpeech = jest
-        .spyOn(speechUtils, 'synthesizeSpeech')
-        .mockResolvedValue(Buffer.from('audio-data'));
-
-      const mockInputData: INodeExecutionData[] = [{ json: {} }];
-
-      const mockParams: { [key: string]: any } = {
-        operation: 'generateSpeech',
-        text: 'Adjust Voice Text',
-        voice: 'en-US-JennyNeural',
-        adjustVoiceSettings: true,
-        rate: 20,
-        pitch: -30,
-        volume: 5,
-      };
-
-      const mockContext = {
-        getInputData: () => mockInputData,
-        getNodeParameter: (name: string, index: number, fallback?: any) => {
-          return mockParams[name] !== undefined ? mockParams[name] : fallback;
-        },
-        getNode: () => ({}),
-        continueOnFail: () => false,
-      } as unknown as IExecuteFunctions;
-
-      await node.execute.call(mockContext);
-
-      expect(mockSynthesizeSpeech).toHaveBeenCalledWith('Adjust Voice Text', {
-        voice: 'en-US-JennyNeural',
-        rate: '+20%',
-        pitch: '-30Hz',
-        volume: '+5%',
-      });
-    });
-  });
-
-  describe('operation = listVoices', () => {
-    it('should return normalized voices list', async () => {
-      const mockVoices = [{ name: 'en-US-JennyNeural', locale: 'en-US', gender: 'Female' }];
-      const mockGetNormalizedVoices = jest.spyOn(voicesUtils, 'getNormalizedVoices').mockResolvedValue(mockVoices);
-
-      const mockInputData: INodeExecutionData[] = [{ json: {} }];
-
-      const mockParams: { [key: string]: any } = {
-        operation: 'listVoices',
-      };
-
-      const mockContext = {
-        getInputData: () => mockInputData,
-        getNodeParameter: (name: string, index: number, fallback?: any) => {
-          return mockParams[name] !== undefined ? mockParams[name] : fallback;
-        },
-        getNode: () => ({}),
-        continueOnFail: () => false,
-      } as unknown as IExecuteFunctions;
-
-      const result = await node.execute.call(mockContext);
-
-      expect(result).toBeDefined();
-      expect(result[0]).toHaveLength(1);
-      expect(result[0][0].json).toEqual({ voices: mockVoices });
-      expect(mockGetNormalizedVoices).toHaveBeenCalledTimes(1);
-    });
-  });
+		expect(result[0]).toEqual([
+			expect.objectContaining({ json: { id: 1, voices }, pairedItem: { item: 0 } }),
+			expect.objectContaining({ json: { id: 2, voices }, pairedItem: { item: 1 } }),
+		]);
+		expect(voicesUtils.getNormalizedVoices).toHaveBeenCalledTimes(1);
+	});
 });
